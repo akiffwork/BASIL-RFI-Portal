@@ -3,7 +3,7 @@ import pandas as pd
 import glob
 import os
 
-st.set_page_config(page_title="BASIL Master RFI Search", layout="wide", page_icon="🏗️")
+st.set_page_config(page_title="BASIL RFI Dashboard", layout="wide", page_icon="🏗️")
 
 @st.cache_data
 def load_all_data():
@@ -25,55 +25,56 @@ def load_all_data():
             continue
     return pd.concat(combined_list, ignore_index=True) if combined_list else pd.DataFrame()
 
-st.title("BASIL PROJECT: RFI Dashboard")
+st.title("🏗️ BASIL PROJECT: RFI Dashboard")
 
 try:
     full_df = load_all_data()
     
     if not full_df.empty:
-        # --- NEW PROGRESS SECTION ---
         st.subheader("📊 Status by Tab")
         tabs_in_data = full_df['Source Tab'].unique()
         
-        # Create a grid to show status for each tab
         for tab in tabs_in_data:
             with st.expander(f"Status for {tab}"):
-                tab_data = full_df[full_df['Source Tab'] == tab]
+                tab_data = full_df[full_df['Source Tab'] == tab].copy()
                 total = len(tab_data)
                 
-                # Count statuses (assumes you have a column named 'Status')
-                # If your column is named differently, change 'Status' below
                 if 'Status' in tab_data.columns:
-                    acc = len(tab_data[tab_data['Status'].str.contains('Accepted', na=False, case=False)])
-                    ong = len(tab_data[tab_data['Status'].str.contains('Ongoing', na=False, case=False)])
-                    can = len(tab_data[tab_data['Status'].str.contains('Cancelled', na=False, case=False)])
+                    # FIX: Force Status to string to avoid the ".str accessor" error
+                    status_col = tab_data['Status'].astype(str)
                     
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Accepted", f"{acc}")
-                    col1.progress(acc/total if total > 0 else 0)
+                    acc = len(tab_data[status_col.str.contains('Accepted', na=False, case=False)])
+                    ong = len(tab_data[status_col.str.contains('Ongoing', na=False, case=False)])
+                    can = len(tab_data[status_col.str.contains('Cancelled', na=False, case=False)])
                     
-                    col2.metric("Ongoing", f"{ong}")
-                    col2.progress(ong/total if total > 0 else 0)
-                    
-                    col3.metric("Cancelled", f"{can}")
-                    col3.progress(can/total if total > 0 else 0)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Accepted", acc)
+                    c1.progress(acc/total if total > 0 else 0)
+                    c2.metric("Ongoing", ong)
+                    c2.progress(ong/total if total > 0 else 0)
+                    c3.metric("Cancelled", can)
+                    c3.progress(can/total if total > 0 else 0)
                 else:
-                    st.write("No 'Status' column found in this tab.")
-        
+                    st.warning("Column 'Status' not found.")
+
         st.markdown("---")
-        # --- SEARCH SECTION ---
         query = st.text_input("Search keywords (e.g., 'C300 concrete'):")
         if query:
             keywords = query.split()
             results = full_df.copy()
             for word in keywords:
+                # FIX: Force entire row to string for universal search
                 mask = results.apply(lambda row: row.astype(str).str.contains(word, case=False).any(), axis=1)
                 results = results[mask]
             
             if not results.empty:
-                st.dataframe(results[['RFI No.', 'Work Item', 'Status', 'Location', 'Source Tab']], use_container_width=True)
+                st.success(f"Found {len(results)} matches.")
+                display_cols = ['RFI No.', 'Work Item', 'Status', 'Location', 'Source Tab']
+                st.dataframe(results[display_cols], use_container_width=True, hide_index=True)
             else:
                 st.warning("No matches found.")
+    else:
+        st.error("No Excel files found in the repository. Please upload your .xlsx files to GitHub.")
 
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(f"Unexpected Error: {e}")
